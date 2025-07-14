@@ -2,18 +2,31 @@ package main
 
 // Imports
 import rl "vendor:raylib"
+import "core:fmt"
 import "core:mem"
 import "core:log"
 import "gui"
+
+// Aliases
+Position :: rl.Vector2
 
 // Constants
 WINDOW_WIDTH :: 1000
 WINDOW_HEIGHT :: 1000
 WINDOW_TITLE :: "Maze Escape"
+ZOOM_MULTIPLIER :: 1
 
-BACKGROUND_COLOR :: rl.DARKBROWN
+NUM_ROWS :: 6
+NUM_COLUMNS :: 6
+CELL_WIDTH :: f32(64)
+CELL_HEIGHT :: f32(64)
+LEVEL_POSITION :: Position{0,0}
+
+BACKGROUND_COLOR :: rl.PURPLE
 TILE_DARK_COLOR :: rl.DARKBROWN
 TILE_LIGHT_COLOR :: rl.BROWN
+
+
 
 // Globals
 
@@ -47,7 +60,7 @@ main :: proc() {
     log.info("Program Start.")
 
     // Create level.
-
+    level := create_level(LEVEL_POSITION.x, LEVEL_POSITION.y, CELL_WIDTH, CELL_HEIGHT, NUM_COLUMNS, NUM_ROWS, CELL_WIDTH, CELL_HEIGHT)
 
     for !rl.WindowShouldClose() {
 
@@ -56,6 +69,13 @@ main :: proc() {
         rl.BeginDrawing()
         rl.ClearBackground(BACKGROUND_COLOR)
 
+        for i in 0..<len(level.tiles) {
+            tile := level.tiles[i]
+            rl.DrawRectangleRec(tile.render.rec, tile.render.color)
+        }
+
+
+        rl.EndDrawing()
 
     }
 
@@ -91,7 +111,7 @@ Wall :: struct {
 
 // Procs
 
-create_level :: proc(x, y, width, height: f32, num_columns, num_rows, num_tiles: int, cell_width, cell_height: f32) -> (Level) {
+create_level :: proc(x, y, width, height: f32, num_columns, num_rows: int, cell_width, cell_height: f32) -> (Level) {
     level := Level{
         x = x,
         y = y,
@@ -99,19 +119,34 @@ create_level :: proc(x, y, width, height: f32, num_columns, num_rows, num_tiles:
         height = height,
         num_columns = num_columns,
         num_rows = num_rows,
-        num_tiles = num_tiles,
+        num_tiles = num_columns * num_rows,
         cell_width = cell_width,
         cell_height = cell_height,
     }
 
-    row_x := x
-    row_y := y
-    for i := 0; i < num_rows; i += 1 {
-
-        for j := 0; j < num_columns; j += 1 {
-            
+    row_counter := 0
+    tile_counter : int
+    level_y: f32 = y
+    for r := 0; r < num_rows; r += 1 {
+        level_x : f32 = x
+        for c := 0; c < num_columns; c += 1 {
+            tile : Tile
+            color : rl.Color
+            if tile_counter % 2 == 0 {
+                color = TILE_DARK_COLOR
+            } else {
+                color = TILE_LIGHT_COLOR
+            }
+            tile = create_tile(level_x, level_y, cell_width, cell_height, color)
+            append(&level.tiles, tile)
+            tile_counter += 1
+            level_x += cell_width
         }
+        level_y += cell_height
+        row_counter += 1
+        tile_counter = row_counter
     }
+    return level
 }
 
 create_tile_raw :: proc(x, y, width, height: f32, color: rl.Color) -> (Tile) {
