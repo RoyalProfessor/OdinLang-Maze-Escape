@@ -77,8 +77,12 @@ main :: proc() {
 
         rl.EndDrawing()
 
+        free_all(context.temp_allocator)
     }
 
+    when ODIN_DEBUG {
+        delete(level.tiles)
+    }
 }
 
 // Structs
