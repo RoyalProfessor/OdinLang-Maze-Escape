@@ -112,11 +112,16 @@ Direction_Vectors :: [Direction][2]int {
 
 Tile :: struct {
     render : gui.Renderable,
-    boundary : Direction_Set
+    valid_directions : Direction_Set
 }
 
 Wall :: struct {
     render : gui.Renderable,
+}
+
+Player :: struct {
+    render : gui.Renderable,
+    movement : Direction
 }
 
 // Procs
@@ -165,7 +170,7 @@ create_tile_raw :: proc(x, y, width, height: f32, color: rl.Color) -> (Tile) {
             color = color,
             rec = rl.Rectangle{x, y, width, height}
         },
-        boundary = {}
+        valid_directions = {}
     }
 }
 
