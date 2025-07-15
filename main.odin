@@ -14,7 +14,7 @@ Position :: rl.Vector2
 WINDOW_WIDTH :: 1000
 WINDOW_HEIGHT :: 1000
 WINDOW_TITLE :: "Maze Escape"
-ZOOM_MULTIPLIER :: 1
+ZOOM_MULTIPLIER :: WINDOW_WIDTH / (CELL_WIDTH * NUM_COLUMNS)
 
 NUM_ROWS :: 6
 NUM_COLUMNS :: 6
@@ -68,6 +68,12 @@ main :: proc() {
         // Rendering Start
         rl.BeginDrawing()
         rl.ClearBackground(BACKGROUND_COLOR)
+
+        camera := rl.Camera2D{
+            zoom = ZOOM_MULTIPLIER
+        }
+
+        rl.BeginMode2D(camera)
 
         for i in 0..<len(level.tiles) {
             tile := level.tiles[i]
