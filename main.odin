@@ -26,7 +26,15 @@ BACKGROUND_COLOR :: rl.PURPLE
 TILE_DARK_COLOR :: rl.DARKBROWN
 TILE_LIGHT_COLOR :: rl.BROWN
 
-
+TOP_LEFT_CORNER :: Direction_Set{.East, .South}
+TOP_RIGHT_CORNER :: Direction_Set{.South, .West}
+TOP_TILE :: Direction_Set{.East, .South, .West}
+BOTTOM_LEFT_CORNER :: Direction_Set{.North, .East}
+BOTTOM_RIGHT_CORNER :: Direction_Set{.North, .West}
+BOTTOM_TILE :: Direction_Set{.North, .East, .West}
+LEFT_TILE :: Direction_Set{.North, .East, .South}
+RIGHT_TILE :: Direction_Set{.North, .South, .East}
+MIDDLE_TILE :: Direction_Set{.North, .East, .South, .West}
 
 // Globals
 
@@ -62,8 +70,28 @@ main :: proc() {
     // Create level.
     level := create_level(LEVEL_POSITION.x, LEVEL_POSITION.y, CELL_WIDTH, CELL_HEIGHT, NUM_COLUMNS, NUM_ROWS, CELL_WIDTH, CELL_HEIGHT)
 
+    // Create list of directions to assign to tiles.
+    directions : [dynamic]Direction_Set
+    append(&directions, TOP_LEFT_CORNER, TOP_TILE,TOP_TILE,TOP_TILE, TOP_TILE, TOP_RIGHT_CORNER,
+      LEFT_TILE, MIDDLE_TILE,MIDDLE_TILE,MIDDLE_TILE,MIDDLE_TILE,RIGHT_TILE,
+      LEFT_TILE, MIDDLE_TILE,MIDDLE_TILE,MIDDLE_TILE,MIDDLE_TILE,RIGHT_TILE,
+      LEFT_TILE, MIDDLE_TILE,MIDDLE_TILE,MIDDLE_TILE,MIDDLE_TILE,RIGHT_TILE,
+      LEFT_TILE, MIDDLE_TILE,MIDDLE_TILE,MIDDLE_TILE,MIDDLE_TILE,RIGHT_TILE,
+      BOTTOM_LEFT_CORNER, BOTTOM_TILE, BOTTOM_TILE, BOTTOM_TILE, BOTTOM_TILE, BOTTOM_RIGHT_CORNER
+    )
+
+    for i in 0..<len(level.tiles) {
+        level.tiles[i].valid_directions = directions[i]
+    }
+
+
     for !rl.WindowShouldClose() {
 
+        for t in level.tiles {
+            if button_click_render(t.render, ZOOM_MULTIPLIER) {
+                log.info(t)
+            }
+        }
 
         // Rendering Start
         rl.BeginDrawing()
@@ -88,6 +116,7 @@ main :: proc() {
 
     when ODIN_DEBUG {
         delete(level.tiles)
+        delete(directions)
     }
 }
 
