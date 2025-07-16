@@ -5,12 +5,7 @@ import rl "vendor:raylib"
 
 // Constants
 
-
-// Globals
-
-
 // Structs
-
 Position :: struct {
     x, y : f32
 }
@@ -25,9 +20,7 @@ TextureRenderable :: struct {
     using position : Position
 }
 
-
 // Procs
-
 button_click_render :: proc(render: Renderable, zoom: f32, line_thick: f32 = 0, mouse_click: rl.MouseButton = rl.MouseButton.LEFT) -> (bool) {
     mouse_pos := rl.GetMousePosition()
     mouse_x := mouse_pos[0]
