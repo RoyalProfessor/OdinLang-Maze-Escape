@@ -8,7 +8,6 @@ import "core:log"
 import "gui"
 
 // Aliases
-Position :: rl.Vector2
 
 // Constants
 WINDOW_WIDTH :: 1000
@@ -20,7 +19,7 @@ NUM_ROWS :: 6
 NUM_COLUMNS :: 6
 CELL_WIDTH :: f32(64)
 CELL_HEIGHT :: f32(64)
-LEVEL_POSITION :: Position{0,0}
+LEVEL_POSITION :: gui.Position{0,0}
 
 BACKGROUND_COLOR :: rl.PURPLE
 TILE_DARK_COLOR :: rl.DARKBROWN
@@ -33,11 +32,13 @@ BOTTOM_LEFT_CORNER :: Direction_Set{.North, .East}
 BOTTOM_RIGHT_CORNER :: Direction_Set{.North, .West}
 BOTTOM_TILE :: Direction_Set{.North, .East, .West}
 LEFT_TILE :: Direction_Set{.North, .East, .South}
-RIGHT_TILE :: Direction_Set{.North, .South, .East}
+RIGHT_TILE :: Direction_Set{.North, .South, .West}
 MIDDLE_TILE :: Direction_Set{.North, .East, .South, .West}
 
-// Globals
+PLAYER_RENDER :: gui.Renderable{rl.RED,{0,0, 40, 40}}
 
+// Globals
+player : Entity
 
 main :: proc() {
 
@@ -84,6 +85,16 @@ main :: proc() {
         level.tiles[i].valid_directions = directions[i]
     }
 
+    player = Entity{
+        render = PLAYER_RENDER,
+        movement = Entity_Movement{
+            tile_i = 8,
+            num_moves = 1,
+            directions = level.tiles[8].valid_directions
+        }
+    }
+
+    move_to_tile(&player, level.tiles[8])
 
     for !rl.WindowShouldClose() {
 
@@ -92,6 +103,12 @@ main :: proc() {
                 log.info(t)
             }
         }
+
+        if gui.button_click_render(player.render, ZOOM_MULTIPLIER) {
+            log.info(player)
+        }
+
+        player_input := player_movement(level, &player)
 
         // Rendering Start
         rl.BeginDrawing()
@@ -108,6 +125,7 @@ main :: proc() {
             rl.DrawRectangleRec(tile.render.rec, tile.render.color)
         }
 
+        rl.DrawRectangleRec(player.render.rec, player.render.color)
 
         rl.EndDrawing()
 
@@ -148,16 +166,105 @@ Wall :: struct {
     render : gui.Renderable,
 }
 
-Player :: struct {
+Entity :: struct {
     render : gui.Renderable,
-    movement : Direction
+    movement : Entity_Movement
 }
 
 Entity_Movement :: struct {
-    num_moves : int
+    tile_i : int,
+    num_moves : int,
+    directions : Direction_Set
+}
+
+EntityList :: struct {
+    entities : [dynamic]Entity
+}
+
+PlayerInput :: enum {
+    Move,
+    Wait,
+    Invalid,
 }
 
 // Procs
+player_movement :: proc(level: Level, e: ^Entity) -> (PlayerInput) {
+    input : PlayerInput
+
+    #partial switch rl.GetKeyPressed() {
+        case .W:
+            if (e.movement.directions & {.North}) == {.North} {
+                find_and_move(level, e, {.North})
+                input = .Move
+            }
+        case .A:
+            if (e.movement.directions & {.West}) == {.West} {
+                find_and_move(level, e, {.West})
+                input = .Move
+            }
+        case .S:
+            if (e.movement.directions & {.South}) == {.South} {
+                find_and_move(level, e, {.South})
+                input = .Move
+            }
+        case .D:
+            if (e.movement.directions & {.East}) == {.East} {
+                find_and_move(level, e, {.East})
+                input = .Move
+            }
+        case .SPACE:
+            input = .Wait
+    }
+    return input
+}
+
+find_and_move :: proc(level: Level, e: ^Entity, direction: Direction_Set) {
+    next_tile_i : int
+    next_tile_i = find_next_tile(level, direction, e.movement.tile_i)
+    next_tile := level.tiles[next_tile_i]
+    move_to_tile(e, next_tile)
+    e.movement.tile_i = next_tile_i
+}
+
+find_next_tile :: proc(level: Level, direction: Direction_Set, tile_i: int) -> (int) {
+    next_tile_i : int
+
+    if (direction & {.North}) == {.North} {
+        next_tile_i = tile_i - level.num_columns
+    }
+    else if (direction & {.East}) == {.East} {
+        next_tile_i = tile_i + 1
+    }
+    else if (direction & {.South}) == {.South} {
+        next_tile_i = tile_i + level.num_columns
+    }
+    else if (direction & {.West}) == {.West} {
+        next_tile_i = tile_i - 1
+    } else {
+        next_tile_i = tile_i
+    }
+    return next_tile_i
+}
+
+move_to_tile :: proc(e: ^Entity, tile: Tile) {
+    center_position := gui.find_center_position(tile.render.rec)
+    offset_position := gui.find_center_offset(e.render.rec, center_position)
+    update_position(offset_position, &e.render)
+    e.movement.directions = tile.valid_directions
+}
+
+update_position_pos :: proc(position: gui.Position, render: ^gui.Renderable) {
+    render.x = position.x
+    render.y = position.y
+}
+
+update_position_rec :: proc(rec: rl.Rectangle, render: ^gui.Renderable) {
+    position := gui.Position{rec.x, rec.y}
+    update_position_pos(position, render)
+}
+
+update_position :: proc{update_position_pos, update_position_rec}
+
 create_level :: proc(x, y, width, height: f32, num_columns, num_rows: int, cell_width, cell_height: f32) -> (Level) {
     level := Level{
         x = x,

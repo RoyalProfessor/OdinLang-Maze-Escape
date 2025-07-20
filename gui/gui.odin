@@ -6,9 +6,7 @@ import rl "vendor:raylib"
 // Constants
 
 // Structs
-Position :: struct {
-    x, y : f32
-}
+Position :: rl.Vector2
 
 Renderable :: struct {
     color: rl.Color,
@@ -30,4 +28,16 @@ button_click_render :: proc(render: Renderable, zoom: f32, line_thick: f32 = 0, 
     lower_y := (render.y + line_thick) * zoom
     upper_y := (render.y * zoom) + ((render.height - line_thick) * zoom)
     return mouse_x >= lower_x && mouse_x <= upper_x && mouse_y >= lower_y && mouse_y <= upper_y && rl.IsMouseButtonPressed(mouse_click) == true
+}
+
+find_center_position :: proc(rec: rl.Rectangle) -> (Position) {
+    center_x := rec.x + (rec.width/2)
+    center_y := rec.y + (rec.height/2)
+    return Position{center_x, center_y}
+}
+
+find_center_offset :: proc(rec: rl.Rectangle, center: Position) -> (Position) {
+    offset_x := center.x - (rec.width/2)
+    offset_y := center.y - (rec.height/2)
+    return Position{offset_x, offset_y}
 }
