@@ -64,6 +64,7 @@ PLAYER_RENDER :: gui.Renderable{rl.RED,{0,0, 40, 40}}
 
 // Globals
 player : Entity
+player_start_i : int = 30
 
 main :: proc() {
 
@@ -94,16 +95,17 @@ main :: proc() {
     log.info("Program Start.")
 
     // Create level.
-    level := create_level(LEVEL_POSITION.x, LEVEL_POSITION.y, CELL_WIDTH, CELL_HEIGHT, NUM_COLUMNS, NUM_ROWS, CELL_WIDTH, CELL_HEIGHT)
+    level := create_level(LEVEL_POSITION.x, LEVEL_POSITION.y, CELL_WIDTH, CELL_HEIGHT, NUM_COLUMNS, NUM_ROWS, player_start_i, CELL_WIDTH, CELL_HEIGHT)
 
     // Create list of directions to assign to tiles.
     directions : [dynamic]Direction_Set
-    append(&directions, TOP_LEFT_CORNER, TOP_TILE,TOP_TILE,TOP_TILE, TOP_TILE, TOP_RIGHT_CORNER,
-      LEFT_TILE, MIDDLE_TILE,MIDDLE_TILE,MIDDLE_TILE,MIDDLE_TILE,RIGHT_TILE,
-      LEFT_TILE, MIDDLE_TILE,MIDDLE_TILE,MIDDLE_TILE,MIDDLE_TILE,RIGHT_TILE,
-      LEFT_TILE, MIDDLE_TILE,MIDDLE_TILE,MIDDLE_TILE,MIDDLE_TILE,RIGHT_TILE,
-      LEFT_TILE, MIDDLE_TILE,MIDDLE_TILE,MIDDLE_TILE,MIDDLE_TILE,RIGHT_TILE,
-      BOTTOM_LEFT_CORNER, BOTTOM_TILE, BOTTOM_TILE, BOTTOM_TILE, BOTTOM_TILE, BOTTOM_RIGHT_CORNER
+    append(&directions,
+        Direction_Set{.East, .South}, Direction_Set{.East, .West}, Direction_Set{.East, .South, .West}, Direction_Set{.South, .West}, Direction_Set{.South}, Direction_Set{.South},
+        Direction_Set{.North}, Direction_Set{.East, .South}, Direction_Set{.North, .East, .South, .West}, Direction_Set{.North, .East, .South, .West}, Direction_Set{.North, .East, .South, .West}, Direction_Set{.North, .South, .West},
+        Direction_Set{.East, .South}, Direction_Set{.North, .South, .West}, Direction_Set{.North, .East, .South}, Direction_Set{.North, .East, .West}, Direction_Set{.North, .East, .South, .West}, Direction_Set{.North, .South, .West},
+        Direction_Set{.North, .South}, Direction_Set{.North, .East, .South}, Direction_Set{.North, .South, .West}, Direction_Set{.South}, Direction_Set{.North, .East, .South}, Direction_Set{.North, .South, .West},
+        Direction_Set{.North}, Direction_Set{.North, .South}, Direction_Set{.North, .East, .South}, Direction_Set{.North, .South, .West}, Direction_Set{.North, .East, .South}, Direction_Set{.North, .South, .West},
+        Direction_Set{.East}, Direction_Set{.North, .East, .West}, Direction_Set{.North, .East, .West}, Direction_Set{.North, .West}, Direction_Set{.North, .East}, Direction_Set{.North, .West}
     )
 
     for i in 0..<len(level.tiles) {
@@ -113,13 +115,13 @@ main :: proc() {
     player = Entity{
         render = PLAYER_RENDER,
         movement = Entity_Movement{
-            tile_i = 8,
+            tile_i = level.player_start_i,
             num_moves = 1,
-            directions = level.tiles[8].valid_directions
+            directions = level.tiles[level.player_start_i].valid_directions
         }
     }
 
-    move_to_tile(&player, level.tiles[8])
+    move_to_tile(&player, level.tiles[level.player_start_i])
 
     for !rl.WindowShouldClose() {
 
@@ -173,8 +175,10 @@ main :: proc() {
 Level :: struct {
     using rec : rl.Rectangle,
     num_columns, num_rows, num_tiles : int,
+    player_start_i : int,
     cell_width, cell_height : f32,
-    tiles : [dynamic]Tile
+    tiles : [dynamic]Tile,
+    enemy_starting_tiles : [dynamic]int
 }
 
 Direction :: enum {
@@ -359,7 +363,7 @@ update_position_rec :: proc(rec: rl.Rectangle, render: ^gui.Renderable) {
 
 update_position :: proc{update_position_pos, update_position_rec}
 
-create_level :: proc(x, y, width, height: f32, num_columns, num_rows: int, cell_width, cell_height: f32) -> (Level) {
+create_level :: proc(x, y, width, height: f32, num_columns, num_rows, player_start_i: int, cell_width, cell_height: f32) -> (Level) {
     level := Level{
         x = x,
         y = y,
@@ -368,6 +372,7 @@ create_level :: proc(x, y, width, height: f32, num_columns, num_rows: int, cell_
         num_columns = num_columns,
         num_rows = num_rows,
         num_tiles = num_columns * num_rows,
+        player_start_i = player_start_i,
         cell_width = cell_width,
         cell_height = cell_height,
     }
