@@ -41,3 +41,7 @@ find_center_offset :: proc(rec: rl.Rectangle, center: Position) -> (Position) {
     offset_y := center.y - (rec.height/2)
     return Position{offset_x, offset_y}
 }
+
+draw_rec_render :: proc(render: Renderable) {
+    rl.DrawRectangleRec(render.rec, render.color)
+}

@@ -24,7 +24,9 @@ LEVEL_POSITION :: gui.Position{0,0}
 BACKGROUND_COLOR :: rl.PURPLE
 TILE_DARK_COLOR :: rl.DARKBROWN
 TILE_LIGHT_COLOR :: rl.BROWN
+WALL_COLOR :: rl.BEIGE
 
+// Empty Tiles
 TOP_LEFT_CORNER :: Direction_Set{.East, .South}
 TOP_RIGHT_CORNER :: Direction_Set{.South, .West}
 TOP_TILE :: Direction_Set{.East, .South, .West}
@@ -33,7 +35,30 @@ BOTTOM_RIGHT_CORNER :: Direction_Set{.North, .West}
 BOTTOM_TILE :: Direction_Set{.North, .East, .West}
 LEFT_TILE :: Direction_Set{.North, .East, .South}
 RIGHT_TILE :: Direction_Set{.North, .South, .West}
-MIDDLE_TILE :: Direction_Set{.North, .East, .South, .West}
+MIDDLE_TILE :: Direction_Set{.North}
+
+// Walls
+WALL_PADDING :: f32(7)
+HORIZONTAL_WALL :: Wall{
+    render = {
+        color = WALL_COLOR,
+        x = 0,
+        y = 0,
+        width = CELL_WIDTH,
+        height = WALL_PADDING
+    },
+    padding = WALL_PADDING
+}
+VERTICAL_WALL :: Wall{
+    render = {
+        color = WALL_COLOR,
+        x = 0,
+        y = 0,
+        width = WALL_PADDING,
+        height = CELL_HEIGHT
+    },
+    padding = WALL_PADDING
+}
 
 PLAYER_RENDER :: gui.Renderable{rl.RED,{0,0, 40, 40}}
 
@@ -125,6 +150,12 @@ main :: proc() {
             rl.DrawRectangleRec(tile.render.rec, tile.render.color)
         }
 
+        for i in 0..<len(level.tiles) {
+            tile := level.tiles[i]
+            inverse_set := inverse_directions(tile.valid_directions)
+            draw_walls_from_inverse(tile, HORIZONTAL_WALL, VERTICAL_WALL, inverse_set)
+        }
+
         rl.DrawRectangleRec(player.render.rec, player.render.color)
 
         rl.EndDrawing()
@@ -164,6 +195,7 @@ Tile :: struct {
 
 Wall :: struct {
     render : gui.Renderable,
+    padding : f32
 }
 
 Entity :: struct {
@@ -177,19 +209,81 @@ Entity_Movement :: struct {
     directions : Direction_Set
 }
 
-EntityList :: struct {
+Entity_List :: struct {
     entities : [dynamic]Entity
 }
 
-PlayerInput :: enum {
+Player_Input :: enum {
     Move,
     Wait,
+    Pause,
     Invalid,
 }
 
+Wall_Orientation :: enum {
+    Horizontal,
+    Vertical
+}
+
 // Procs
-player_movement :: proc(level: Level, e: ^Entity) -> (PlayerInput) {
-    input : PlayerInput
+draw_walls_from_inverse :: proc(tile: Tile, h_wall, v_wall: Wall, inverse_set: Direction_Set) {
+    wall_pos : gui.Position
+    wall : Wall
+    for i in inverse_set {
+        switch i {
+            case .North:
+                wall_pos = find_wall_position(h_wall, tile, {.North})
+                wall = h_wall
+                wall.render.x -= (wall.padding/2)
+                wall.render.width += wall.padding
+            case .East:
+                wall_pos = find_wall_position(v_wall, tile, {.East})
+                wall = v_wall
+                wall.render.y -= (wall.padding/2)
+                wall.render.height += wall.padding
+            case .South:
+                wall_pos = find_wall_position(h_wall, tile, {.South})
+                wall = h_wall
+                wall.render.x -= (wall.padding/2)
+                wall.render.width += wall.padding
+            case .West:
+                wall_pos = find_wall_position(v_wall, tile, {.West})
+                wall = v_wall
+                wall.render.y -= (wall.padding/2)
+                wall.render.height += wall.padding
+        }
+        wall.render.x += wall_pos.x
+        wall.render.y += wall_pos.y
+        gui.draw_rec_render(wall.render)
+    }
+}
+
+find_wall_position :: proc(wall: Wall, tile: Tile, wall_direction: Direction_Set) -> (gui.Position) {
+    wall_pos : gui.Position
+    switch wall_direction {
+        case {.North}:
+            wall_pos.x = tile.render.x
+            wall_pos.y = tile.render.y - (wall.render.height/2)
+        case {.East}:
+            wall_pos.x = tile.render.x + tile.render.width - (wall.render.width/2)
+            wall_pos.y = tile.render.y
+        case {.South}:
+            wall_pos.x = tile.render.x
+            wall_pos.y = tile.render.y + tile.render.height - (wall.render.height/2)
+        case {.West}:
+            wall_pos.x = tile.render.x - (wall.render.width/2)
+            wall_pos.y = tile.render.y
+    }
+    return wall_pos
+}
+
+inverse_directions :: proc(directions: Direction_Set) -> (Direction_Set) {
+    all_set := Direction_Set{.North, .East, .South, .West}
+    return all_set - directions
+}
+
+player_movement :: proc(level: Level, e: ^Entity) -> (Player_Input) {
+    input : Player_Input
 
     #partial switch rl.GetKeyPressed() {
         case .W:
