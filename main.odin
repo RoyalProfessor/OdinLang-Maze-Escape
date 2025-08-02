@@ -5,6 +5,7 @@ import rl "vendor:raylib"
 import "core:fmt"
 import "core:mem"
 import "core:log"
+import "core:math"
 import "gui"
 
 // Aliases
@@ -24,7 +25,7 @@ LEVEL_POSITION :: gui.Position{0,0}
 BACKGROUND_COLOR :: rl.PURPLE
 TILE_DARK_COLOR :: rl.DARKBROWN
 TILE_LIGHT_COLOR :: rl.BROWN
-WALL_COLOR :: rl.BEIGE
+WALL_COLOR :: rl.BLACK
 
 // Empty Tiles
 TOP_LEFT_CORNER :: Direction_Set{.East, .South}
@@ -35,7 +36,7 @@ BOTTOM_RIGHT_CORNER :: Direction_Set{.North, .West}
 BOTTOM_TILE :: Direction_Set{.North, .East, .West}
 LEFT_TILE :: Direction_Set{.North, .East, .South}
 RIGHT_TILE :: Direction_Set{.North, .South, .West}
-MIDDLE_TILE :: Direction_Set{.North}
+MIDDLE_TILE :: Direction_Set{.North, .East, .South, .West}
 
 // Walls
 WALL_PADDING :: f32(7)
@@ -63,8 +64,12 @@ VERTICAL_WALL :: Wall{
 PLAYER_RENDER :: gui.Renderable{rl.RED,{0,0, 40, 40}}
 
 // Globals
-player : Entity
+player_ptr : ^Entity
 player_start_i : int = 30
+delta_time : f32
+turn_context : Turn_Context
+entity_context : Entity_Context
+entities : Entity_List
 
 main :: proc() {
 
@@ -88,10 +93,9 @@ main :: proc() {
         }
     }
 
-    context.logger = log.create_console_logger()
-
     rl.SetConfigFlags({.VSYNC_HINT})
     rl.InitWindow(WINDOW_WIDTH, WINDOW_HEIGHT, WINDOW_TITLE)
+    context.logger = log.create_console_logger()
     log.info("Program Start.")
 
     // Create level.
@@ -112,30 +116,38 @@ main :: proc() {
         level.tiles[i].valid_directions = directions[i]
     }
 
-    player = Entity{
+    player := Entity{
         render = PLAYER_RENDER,
         movement = Entity_Movement{
             tile_i = level.player_start_i,
             num_moves = 1,
+            move_speed = 50,
             directions = level.tiles[level.player_start_i].valid_directions
-        }
+        },
+        index = 0
     }
+    append(&entities.arr, player)
+    player.index = len(entities.arr)-1
+    player_ptr = &entities.arr[player.index]
 
-    move_to_tile(&player, level.tiles[level.player_start_i])
+    move_to_tile(&entities.arr[0], level.tiles[level.player_start_i])
+
+    reset_entity_context(player.index, &entity_context, entities)
 
     for !rl.WindowShouldClose() {
+        delta_time = rl.GetFrameTime()
 
-        for t in level.tiles {
-            if gui.button_click_render(t.render, ZOOM_MULTIPLIER) {
-                log.info(t)
+        for i in 0..<len(level.tiles) {
+            if gui.button_click_render(level.tiles[i].render, ZOOM_MULTIPLIER) {
+                log.info(i, level.tiles[i])
             }
         }
 
-        if gui.button_click_render(player.render, ZOOM_MULTIPLIER) {
-            log.info(player)
+        if gui.button_click_render(player_ptr.render, ZOOM_MULTIPLIER) {
+            log.info(player_ptr)
         }
 
-        player_input := player_movement(level, &player)
+        entity_state_handler(&entity_context, entities, level)
 
         // Rendering Start
         rl.BeginDrawing()
@@ -158,7 +170,7 @@ main :: proc() {
             draw_walls_from_inverse(tile, HORIZONTAL_WALL, VERTICAL_WALL, inverse_set)
         }
 
-        rl.DrawRectangleRec(player.render.rec, player.render.color)
+        rl.DrawRectangleRec(entities.arr[0].render.rec, player.render.color)
 
         rl.EndDrawing()
 
@@ -185,7 +197,7 @@ Direction :: enum {
     North, East, South, West
 }
 Direction_Set :: bit_set[Direction]
-Direction_Vectors :: [Direction][2]int {
+Direction_Vectors :: [Direction][2]f32 {
     .North = {0,-1},
     .East = {1, 0},
     .South = {0, 1},
@@ -204,32 +216,239 @@ Wall :: struct {
 
 Entity :: struct {
     render : gui.Renderable,
-    movement : Entity_Movement
+    movement : Entity_Movement,
+    index : int,
+    actor_type : Actor_Type
 }
 
 Entity_Movement :: struct {
     tile_i : int,
     num_moves : int,
+    move_speed : f32,
     directions : Direction_Set
 }
 
 Entity_List :: struct {
-    entities : [dynamic]Entity
+    arr : [dynamic]Entity
 }
 
-Player_Input :: enum {
+Entity_State :: enum {
+    Idle,
     Move,
     Wait,
-    Pause,
-    Invalid,
+    End,
 }
 
-Wall_Orientation :: enum {
-    Horizontal,
-    Vertical
+Input_Type :: enum {
+    Wait,
+    Move,
+    Idle,
+    Invalid
+}
+
+Actor_Type :: enum {
+    Player,
+    AI
+}
+
+Actor_Input :: struct {
+    type : Actor_Type,
+    input : Input_Type,
+    key : rl.KeyboardKey
+}
+
+Input_List :: struct {
+    arr : [dynamic]Actor_Input
+}
+
+Entity_Context :: struct {
+    input: Actor_Input,
+    state : Entity_State,
+    entity_i: int,
+    remaining_moves : int,
+    destination_i : int,
+    origin_i : int,
+}
+
+Turn_State :: enum {
+    Waiting,
+    Processing,
+    Next
+}
+
+Turn_Context :: struct {
+    state : Turn_State,
+    current_turn : int,
+    entity_context : Entity_Context
 }
 
 // Procs
+entity_state_handler :: proc(entity_context: ^Entity_Context, entities: Entity_List, level: Level) {
+    entity_context.origin_i = entities.arr[entity_context.entity_i].movement.tile_i
+    // log.info(entity_context.state)
+    #partial switch entity_context.state {
+        case .Move:
+            log.info("Move")
+            entity_state_movement(&entities.arr[entity_context.entity_i], entity_context, level)
+        case .Wait:
+
+        case .End:
+
+        case .Idle:
+            input_processing(entity_context, entities)
+    }
+}
+
+entity_state_movement :: proc(entity: ^Entity, entity_context: ^Entity_Context, level: Level) {
+    key := entity_context.input.key
+    
+    #partial switch key {
+        case .UP, .W:
+            if (entity.movement.directions & {.North}) == {.North} {
+                entity_context.destination_i = find_next_tile(level, {.North}, entity_context.origin_i)
+                entity_move_delta(entity, {.North}, level)
+            } else {
+                entity_context.state = .Idle
+            }
+        case .DOWN, .S:
+            if (entity.movement.directions & {.South}) == {.South} {
+                entity_context.destination_i = find_next_tile(level, {.South}, entity_context.origin_i)
+                entity_move_delta(entity, {.South}, level)
+            } else {
+                entity_context.state = .Idle
+            }
+        case .LEFT, .A:
+            if (entity.movement.directions & {.West}) == {.West} {
+                entity_context.destination_i = find_next_tile(level, {.West}, entity_context.origin_i)
+                entity_move_delta(entity, {.West}, level)
+            } else {
+                entity_context.state = .Idle
+            }
+        case .RIGHT, .D:
+            if (entity.movement.directions & {.East}) == {.East} {
+                entity_context.destination_i = find_next_tile(level, {.East}, entity_context.origin_i)
+                entity_move_delta(entity, {.East}, level)
+            } else {
+                entity_context.state = .Idle
+            }
+        case .KEY_NULL, .SPACE:
+            entity_context.destination_i = entity_context.origin_i
+            entity_context.state = .Idle
+    }
+}
+
+entity_move_delta :: proc(entity: ^Entity, directions: Direction_Set, level: Level) {
+    center : gui.Position
+    a : gui.Position = {entity.render.x, entity.render.y}
+    b : gui.Position //Center offset
+    move_speed := entity.movement.move_speed
+    center = gui.find_center_position(level.tiles[entity_context.destination_i].render.rec)
+    b = gui.find_center_offset(entity.render.rec, center)
+    vector_speed := gui.Position{move_speed, move_speed}
+    delta_vector := rl.Vector2{delta_time, delta_time}
+    
+    switch directions {
+        case {.North}:
+            vector_speed = (vector_speed * Direction_Vectors[.North]) * delta_vector
+            if a.y > b.y {
+                entity.render.y += vector_speed.y
+                entity_context.state = .Move
+            } else {
+                entity.render.y = b.y
+                entity_context.state = .Idle
+                entity.movement.directions = level.tiles[entity_context.destination_i].valid_directions
+                entity.movement.tile_i = entity_context.destination_i
+                entity_context.origin_i = entity_context.destination_i
+            }
+        case {.East}:
+            vector_speed = (vector_speed * Direction_Vectors[.East]) * delta_vector
+            if a.x < b.x {
+                entity.render.x += vector_speed.x
+                entity_context.state = .Move
+            } else {
+                entity.render.x = b.x
+                entity_context.state = .Idle
+                entity.movement.directions = level.tiles[entity_context.destination_i].valid_directions
+                entity.movement.tile_i = entity_context.destination_i
+                entity_context.origin_i = entity_context.destination_i
+            }
+        case {.South}:
+            vector_speed = (vector_speed * Direction_Vectors[.South]) * delta_vector
+            if a.y < b.y {
+                entity.render.y += vector_speed.y
+                entity_context.state = .Move
+            } else {
+                entity.render.y = b.y
+                entity_context.state = .Idle
+                entity.movement.directions = level.tiles[entity_context.destination_i].valid_directions
+                entity.movement.tile_i = entity_context.destination_i
+                entity_context.origin_i = entity_context.destination_i
+            }
+        case {.West}:
+            vector_speed = (vector_speed * Direction_Vectors[.West]) * delta_vector
+            if a.x > b.x {
+                entity.render.x += vector_speed.x
+                entity_context.state = .Move
+            } else {
+                entity.render.y = b.y
+                entity_context.state = .Idle
+                entity.movement.directions = level.tiles[entity_context.destination_i].valid_directions
+                entity.movement.tile_i = entity_context.destination_i
+                entity_context.origin_i = entity_context.destination_i
+            }
+    }
+}
+
+input_processing :: proc(entity_context: ^Entity_Context, entities: Entity_List) {
+    e := entities.arr[entity_context.entity_i]
+    input : Actor_Input
+    if e.actor_type == .Player {
+        input = player_input(entity_context^, e)
+        // log.info("Player Input")
+    }
+    entity_context.input = input
+    determine_entity_state(input, entity_context)
+}
+
+player_input :: proc(entity_context: Entity_Context, e: Entity) -> (input: Actor_Input) {
+    input.type = .Player
+    if entity_context.state == .Idle {
+        input.key = rl.GetKeyPressed()
+        #partial switch input.key {
+            case .UP, .DOWN, .LEFT, .RIGHT, .W, .A, .S, .D:
+                input.input = .Move
+                log.info("Move")
+            case .SPACE:
+                input.input = .Wait
+            case .KEY_NULL:
+                input.input = .Invalid
+        }
+    } else {
+        input.input = .Invalid
+    }
+    return input
+}
+
+determine_entity_state :: proc(input: Actor_Input, entity_context: ^Entity_Context) {
+    switch input.input {
+        case .Wait:
+            entity_context.state = .Wait
+        case .Move:
+            entity_context.state = .Move
+        case .Idle, .Invalid:
+            entity_context.state = .Idle
+    }
+}
+
+reset_entity_context :: proc(entity_i: int, entity_context: ^Entity_Context, entities: Entity_List) {
+    entity := entities.arr[entity_i]
+    entity_context.input = Actor_Input{entity.actor_type, .Idle, .KEY_NULL}
+    entity_context.state = .Idle
+    entity_context.remaining_moves = entity.movement.num_moves
+    entity_context.destination_i = -1
+    entity_context.origin_i = entity.movement.tile_i
+}
+
 draw_walls_from_inverse :: proc(tile: Tile, h_wall, v_wall: Wall, inverse_set: Direction_Set) {
     wall_pos : gui.Position
     wall : Wall
@@ -284,36 +503,6 @@ find_wall_position :: proc(wall: Wall, tile: Tile, wall_direction: Direction_Set
 inverse_directions :: proc(directions: Direction_Set) -> (Direction_Set) {
     all_set := Direction_Set{.North, .East, .South, .West}
     return all_set - directions
-}
-
-player_movement :: proc(level: Level, e: ^Entity) -> (Player_Input) {
-    input : Player_Input
-
-    #partial switch rl.GetKeyPressed() {
-        case .W:
-            if (e.movement.directions & {.North}) == {.North} {
-                find_and_move(level, e, {.North})
-                input = .Move
-            }
-        case .A:
-            if (e.movement.directions & {.West}) == {.West} {
-                find_and_move(level, e, {.West})
-                input = .Move
-            }
-        case .S:
-            if (e.movement.directions & {.South}) == {.South} {
-                find_and_move(level, e, {.South})
-                input = .Move
-            }
-        case .D:
-            if (e.movement.directions & {.East}) == {.East} {
-                find_and_move(level, e, {.East})
-                input = .Move
-            }
-        case .SPACE:
-            input = .Wait
-    }
-    return input
 }
 
 find_and_move :: proc(level: Level, e: ^Entity, direction: Direction_Set) {
