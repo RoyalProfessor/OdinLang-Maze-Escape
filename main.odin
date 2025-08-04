@@ -62,6 +62,7 @@ VERTICAL_WALL :: Wall{
 }
 
 PLAYER_RENDER :: gui.Renderable{rl.RED,{0,0, 40, 40}}
+PLAYER_SPEED :: f32(480)
 
 // Globals
 player_ptr : ^Entity
@@ -95,7 +96,7 @@ main :: proc() {
 
     rl.SetConfigFlags({.VSYNC_HINT})
     rl.InitWindow(WINDOW_WIDTH, WINDOW_HEIGHT, WINDOW_TITLE)
-    context.logger = log.create_console_logger()
+    context.logger = log.create_console_logger(); defer {log.destroy_console_logger(context.logger)}
     log.info("Program Start.")
 
     // Create level.
@@ -121,7 +122,7 @@ main :: proc() {
         movement = Entity_Movement{
             tile_i = level.player_start_i,
             num_moves = 1,
-            move_speed = 50,
+            move_speed = PLAYER_SPEED,
             directions = level.tiles[level.player_start_i].valid_directions
         },
         index = 0
@@ -180,6 +181,7 @@ main :: proc() {
     when ODIN_DEBUG {
         delete(level.tiles)
         delete(directions)
+        delete(entities.arr)
     }
 }
 
