@@ -61,8 +61,9 @@ VERTICAL_WALL :: Wall{
     padding = WALL_PADDING
 }
 
+// Player Constants
 PLAYER_RENDER :: gui.Renderable{rl.RED,{0,0, 40, 40}}
-PLAYER_SPEED :: f32(480)
+PLAYER_SPEED :: f32(600)
 
 // Globals
 player_ptr : ^Entity
@@ -340,6 +341,7 @@ entity_state_movement :: proc(entity: ^Entity, entity_context: ^Entity_Context, 
 }
 
 entity_move_delta :: proc(entity: ^Entity, directions: Direction_Set, level: Level) {
+    reached := false
     center : gui.Position
     a : gui.Position = {entity.render.x, entity.render.y}
     b : gui.Position //Center offset
@@ -352,52 +354,41 @@ entity_move_delta :: proc(entity: ^Entity, directions: Direction_Set, level: Lev
     switch directions {
         case {.North}:
             vector_speed = (vector_speed * Direction_Vectors[.North]) * delta_vector
-            if a.y > b.y {
-                entity.render.y += vector_speed.y
-                entity_context.state = .Move
-            } else {
+            entity.render.y += vector_speed.y
+            if a.y < b.y {
                 entity.render.y = b.y
-                entity_context.state = .Idle
-                entity.movement.directions = level.tiles[entity_context.destination_i].valid_directions
-                entity.movement.tile_i = entity_context.destination_i
-                entity_context.origin_i = entity_context.destination_i
+                reached = true
             }
         case {.East}:
             vector_speed = (vector_speed * Direction_Vectors[.East]) * delta_vector
-            if a.x < b.x {
-                entity.render.x += vector_speed.x
-                entity_context.state = .Move
-            } else {
+            entity.render.x += vector_speed.x
+            if a.x > b.x {
                 entity.render.x = b.x
-                entity_context.state = .Idle
-                entity.movement.directions = level.tiles[entity_context.destination_i].valid_directions
-                entity.movement.tile_i = entity_context.destination_i
-                entity_context.origin_i = entity_context.destination_i
+                reached = true
             }
         case {.South}:
             vector_speed = (vector_speed * Direction_Vectors[.South]) * delta_vector
-            if a.y < b.y {
-                entity.render.y += vector_speed.y
-                entity_context.state = .Move
-            } else {
+            entity.render.y += vector_speed.y
+            if a.y > b.y {
                 entity.render.y = b.y
-                entity_context.state = .Idle
-                entity.movement.directions = level.tiles[entity_context.destination_i].valid_directions
-                entity.movement.tile_i = entity_context.destination_i
-                entity_context.origin_i = entity_context.destination_i
+                reached = true
             }
         case {.West}:
             vector_speed = (vector_speed * Direction_Vectors[.West]) * delta_vector
-            if a.x > b.x {
-                entity.render.x += vector_speed.x
-                entity_context.state = .Move
-            } else {
-                entity.render.y = b.y
-                entity_context.state = .Idle
-                entity.movement.directions = level.tiles[entity_context.destination_i].valid_directions
-                entity.movement.tile_i = entity_context.destination_i
-                entity_context.origin_i = entity_context.destination_i
+            entity.render.x += vector_speed.x
+            if a.x < b.x {
+                entity.render.x = b.x
+                reached = true
             }
+    }
+
+    if reached {
+        entity_context.state = .Idle
+        entity.movement.directions = level.tiles[entity_context.destination_i].valid_directions
+        entity.movement.tile_i = entity_context.destination_i
+        entity_context.origin_i = entity_context.destination_i
+    } else {
+        entity_context.state = .Move
     }
 }
 
