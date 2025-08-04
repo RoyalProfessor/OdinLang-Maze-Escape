@@ -291,12 +291,13 @@ entity_state_handler :: proc(entity_context: ^Entity_Context, entities: Entity_L
     // log.info(entity_context.state)
     #partial switch entity_context.state {
         case .Move:
-            log.info("Move")
+            log.info("Entity Move")
             entity_state_movement(&entities.arr[entity_context.entity_i], entity_context, level)
         case .Wait:
-
+            log.info("Entity Wait")
+            entity_state_wait(entity_context)
         case .End:
-
+            log.info("Entity End")
         case .Idle:
             input_processing(entity_context, entities)
     }
@@ -307,6 +308,7 @@ entity_state_movement :: proc(entity: ^Entity, entity_context: ^Entity_Context, 
     
     #partial switch key {
         case .UP, .W:
+            log.info("Entity Move Up")
             if (entity.movement.directions & {.North}) == {.North} {
                 entity_context.destination_i = find_next_tile(level, {.North}, entity_context.origin_i)
                 entity_move_delta(entity, {.North}, level)
@@ -314,6 +316,7 @@ entity_state_movement :: proc(entity: ^Entity, entity_context: ^Entity_Context, 
                 entity_context.state = .Idle
             }
         case .DOWN, .S:
+            log.info("Entity Move Down")
             if (entity.movement.directions & {.South}) == {.South} {
                 entity_context.destination_i = find_next_tile(level, {.South}, entity_context.origin_i)
                 entity_move_delta(entity, {.South}, level)
@@ -321,6 +324,7 @@ entity_state_movement :: proc(entity: ^Entity, entity_context: ^Entity_Context, 
                 entity_context.state = .Idle
             }
         case .LEFT, .A:
+            log.info("Entity Move Left")
             if (entity.movement.directions & {.West}) == {.West} {
                 entity_context.destination_i = find_next_tile(level, {.West}, entity_context.origin_i)
                 entity_move_delta(entity, {.West}, level)
@@ -328,61 +332,51 @@ entity_state_movement :: proc(entity: ^Entity, entity_context: ^Entity_Context, 
                 entity_context.state = .Idle
             }
         case .RIGHT, .D:
+            log.info("Entity Move Right")
             if (entity.movement.directions & {.East}) == {.East} {
                 entity_context.destination_i = find_next_tile(level, {.East}, entity_context.origin_i)
                 entity_move_delta(entity, {.East}, level)
             } else {
                 entity_context.state = .Idle
             }
-        case .KEY_NULL, .SPACE:
-            entity_context.destination_i = entity_context.origin_i
-            entity_context.state = .Idle
     }
 }
 
+entity_state_wait :: proc(entity_context: ^Entity_Context) {
+    log.info("Entity Wait Idle")
+    entity_context.destination_i = entity_context.origin_i
+    entity_context.state = .Idle
+}
+
 entity_move_delta :: proc(entity: ^Entity, directions: Direction_Set, level: Level) {
-    reached := false
     center : gui.Position
-    a : gui.Position = {entity.render.x, entity.render.y}
+    e_pos : gui.Position = {entity.render.x, entity.render.y}
     b : gui.Position //Center offset
     move_speed := entity.movement.move_speed
     center = gui.find_center_position(level.tiles[entity_context.destination_i].render.rec)
     b = gui.find_center_offset(entity.render.rec, center)
+    distance := b - e_pos
+    distance = {math.abs(distance.x), math.abs(distance.y)}
     vector_speed := gui.Position{move_speed, move_speed}
     delta_vector := rl.Vector2{delta_time, delta_time}
     
     switch directions {
         case {.North}:
             vector_speed = (vector_speed * Direction_Vectors[.North]) * delta_vector
-            entity.render.y += vector_speed.y
-            if a.y < b.y {
-                entity.render.y = b.y
-                reached = true
-            }
         case {.East}:
             vector_speed = (vector_speed * Direction_Vectors[.East]) * delta_vector
-            entity.render.x += vector_speed.x
-            if a.x > b.x {
-                entity.render.x = b.x
-                reached = true
-            }
         case {.South}:
             vector_speed = (vector_speed * Direction_Vectors[.South]) * delta_vector
-            entity.render.y += vector_speed.y
-            if a.y > b.y {
-                entity.render.y = b.y
-                reached = true
-            }
         case {.West}:
             vector_speed = (vector_speed * Direction_Vectors[.West]) * delta_vector
-            entity.render.x += vector_speed.x
-            if a.x < b.x {
-                entity.render.x = b.x
-                reached = true
-            }
     }
 
-    if reached {
+    e_pos += vector_speed
+    entity.render.x, entity.render.y = e_pos.x, e_pos.y
+    distance -= {math.abs(vector_speed.x), math.abs(vector_speed.y)}
+    
+    if distance.x <= 0 && distance.y <= 0 {
+        entity.render.x, entity.render.y = b.x, b.y
         entity_context.state = .Idle
         entity.movement.directions = level.tiles[entity_context.destination_i].valid_directions
         entity.movement.tile_i = entity_context.destination_i
@@ -410,14 +404,17 @@ player_input :: proc(entity_context: Entity_Context, e: Entity) -> (input: Actor
         #partial switch input.key {
             case .UP, .DOWN, .LEFT, .RIGHT, .W, .A, .S, .D:
                 input.input = .Move
-                log.info("Move")
+                log.info("Key:", input.key, "State:", input.input)
             case .SPACE:
                 input.input = .Wait
+                log.info("Key:", input.key, "State:", input.input)
             case .KEY_NULL:
-                input.input = .Invalid
+                input.input = .Idle
+            case:
+                input.input = .Idle
         }
     } else {
-        input.input = .Invalid
+        input.input = .Idle
     }
     return input
 }
