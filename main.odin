@@ -491,46 +491,22 @@ entity_move_delta :: proc(entity: ^Entity, directions: Direction_Set, level: Lev
 input_processing :: proc(entity_context: ^Entity_Context, entities: Entity_List, level: Level) {
     e := entities.arr[entity_context.entity_i]
     player := entities.arr[entities.player_i]
-    input : Actor_Input
-    if e.actor_type == .Player {
-        input = player_input(entity_context^, e)
-        // log.info("Player Input")
-    } else {
-        input = ai_input(entity_context^, entities, level)
-        log.info("Enemy Input")
-    }
+    input := entity_input(entity_context^, entities, level)
     entity_context.input = input
     determine_entity_state(input, entity_context)
 }
 
-player_input :: proc(entity_context: Entity_Context, e: Entity) -> (input: Actor_Input) {
-    input.type = .Player
-    if entity_context.state == .Idle {
-        input.key = rl.GetKeyPressed()
-        #partial switch input.key {
-            case .UP, .DOWN, .LEFT, .RIGHT, .W, .A, .S, .D:
-                input.input = .Move
-                log.info("Key:", input.key, "State:", input.input)
-            case .SPACE:
-                input.input = .Wait
-                log.info("Key:", input.key, "State:", input.input)
-            case .KEY_NULL:
-                input.input = .Idle
-            case:
-                input.input = .Idle
-        }
-    } else {
-        input.input = .Idle
-    }
-    return input
-}
-
-ai_input :: proc(entity_context: Entity_Context, entities: Entity_List, level: Level) -> (input: Actor_Input) {
+entity_input :: proc(entity_context: Entity_Context, entities: Entity_List, level: Level) -> (input: Actor_Input) {
     entity := entities.arr[entity_context.entity_i]
     player := entities.arr[entities.player_i]
-    input.type = .AI
+    input.type = entity.actor_type
     if entity_context.state == .Idle {
-        input.key = ai_decide_move(entity, player, level)
+        if input.type == .Player {
+            input.key = rl.GetKeyPressed()
+        }
+        else if input.type == .AI {
+            input.key = ai_decide_move(entity, player, level)
+        }
         #partial switch input.key {
             case .UP, .DOWN, .LEFT, .RIGHT, .W, .A, .S, .D:
                 input.input = .Move
