@@ -527,7 +527,7 @@ entity_input :: proc(entity_context: Entity_Context, entities: Entity_List, leve
 
 ai_decide_move :: proc(entity, player: Entity, level: Level) -> (rl.KeyboardKey) {
     pref := entity.move_pref
-    key : rl.KeyboardKey = .KEY_NULL
+    key : rl.KeyboardKey = .SPACE
     directions := entity.movement.directions
     num_column := level.num_columns
     player_tile_pos := find_v2_from_tile_index(player.movement.tile_i, num_column)
@@ -559,9 +559,6 @@ ai_decide_move :: proc(entity, player: Entity, level: Level) -> (rl.KeyboardKey)
                 pref = .Horizontal
             }
         }
-    }
-    if key == .KEY_NULL {
-        key = .SPACE
     }
     return key
 }
