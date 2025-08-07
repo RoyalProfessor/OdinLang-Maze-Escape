@@ -62,13 +62,19 @@ VERTICAL_WALL :: Wall{
 }
 
 // Player Constants
-PLAYER_RENDER :: gui.Renderable{rl.RED,{0,0, 40, 40}}
+PLAYER_RENDER :: gui.Renderable{rl.RED,{0, 0, 40, 40}}
 PLAYER_SPEED :: f32(600)
-PLAYER_MOVES :: 2
+PLAYER_MOVES :: 1
+
+// White Mummy Constants
+WHITE_MUMMY_RENDER :: gui.Renderable{rl.WHITE,{0, 0, 40, 40}}
+WHITE_MUMMY_SPEED :: f32(400)
+WHITE_MUMMY_MOVES :: 2
 
 // Globals
 player_ptr : ^Entity
 player_start_i : int = 30
+white_mummy_start_i : int = 8
 delta_time : f32
 turn_context : Turn_Context
 entities : Entity_List
@@ -102,6 +108,7 @@ main :: proc() {
 
     // Create level.
     level := create_level(LEVEL_POSITION.x, LEVEL_POSITION.y, CELL_WIDTH, CELL_HEIGHT, NUM_COLUMNS, NUM_ROWS, player_start_i, CELL_WIDTH, CELL_HEIGHT)
+    append(&level.enemy_starting_tiles, white_mummy_start_i)
 
     // Create list of directions to assign to tiles.
     directions : [dynamic]Direction_Set
@@ -126,13 +133,37 @@ main :: proc() {
             move_speed = PLAYER_SPEED,
             directions = level.tiles[level.player_start_i].valid_directions
         },
+        actor_type = .Player,
+        entity_type = .Explorer,
+        move_pref = .None,
         index = 0
     }
     append(&entities.arr, player)
     player.index = len(entities.arr)-1
+    entities.player_i = player.index
     player_ptr = &entities.arr[player.index]
 
+    log.info(level.enemy_starting_tiles)
+
+    mummy := Entity{
+        render = WHITE_MUMMY_RENDER,
+        movement = Entity_Movement{
+            tile_i = level.enemy_starting_tiles[0],
+            num_moves = WHITE_MUMMY_MOVES,
+            move_speed = WHITE_MUMMY_SPEED,
+            directions = level.tiles[level.enemy_starting_tiles[0]].valid_directions
+        },
+        actor_type = .AI,
+        entity_type = .White_Mummy,
+        move_pref = .Horizontal,
+        index = 1
+    }
+    append(&entities.arr, mummy)
+
     move_to_tile(&entities.arr[0], level.tiles[level.player_start_i])
+    move_to_tile(&entities.arr[1], level.tiles[white_mummy_start_i])
+
+    mummy_ptr := &entities.arr[mummy.index]
 
     reset_entity_context(player.index, &turn_context.entity_context, entities)
     turn_context.state = .Input
@@ -151,7 +182,9 @@ main :: proc() {
             log.info(player_ptr)
             log.info(turn_context)
         }
-
+        if gui.button_click_render(mummy_ptr.render, ZOOM_MULTIPLIER) {
+            log.info(mummy_ptr)
+        }
 
         turn_state_handler(&turn_context, entities, level)
 
@@ -178,6 +211,8 @@ main :: proc() {
 
         rl.DrawRectangleRec(entities.arr[0].render.rec, player.render.color)
 
+        rl.DrawRectangleRec(entities.arr[1].render.rec, entities.arr[1].render.color)
+
         rl.EndDrawing()
 
         free_all(context.temp_allocator)
@@ -187,6 +222,7 @@ main :: proc() {
         delete(level.tiles)
         delete(directions)
         delete(entities.arr)
+        delete(level.enemy_starting_tiles)
     }
 }
 
@@ -224,8 +260,10 @@ Wall :: struct {
 Entity :: struct {
     render : gui.Renderable,
     movement : Entity_Movement,
+    actor_type : Actor_Type,
+    entity_type : Entity_Type,
+    move_pref : Move_Pref,
     index : int,
-    actor_type : Actor_Type
 }
 
 Entity_Movement :: struct {
@@ -236,7 +274,21 @@ Entity_Movement :: struct {
 }
 
 Entity_List :: struct {
+    player_i : int,
     arr : [dynamic]Entity
+}
+
+Entity_Type :: enum {
+    Explorer,
+    White_Mummy,
+    Red_Mummy,
+    Scorpion
+}
+
+Move_Pref :: enum {
+    None,
+    Horizontal,
+    Vertical
 }
 
 Entity_State :: enum {
@@ -294,7 +346,7 @@ turn_state_handler :: proc(turn_context: ^Turn_Context, entities: Entity_List, l
     #partial switch turn_context.state {
         case .Input:
             // log.info("Input")
-            input_processing(&turn_context.entity_context, entities)
+            input_processing(&turn_context.entity_context, entities, level)
             if turn_context.entity_context.state == .Idle {
                 // log.info("Input Input")
                 turn_context.state = .Input
@@ -329,7 +381,7 @@ turn_state_next :: proc(turn_context: ^Turn_Context, entities: Entity_List) {
 entity_state_handler :: proc(turn_context: ^Turn_Context, entities: Entity_List, level: Level) {
     #partial switch turn_context.entity_context.state {
         case .Move:
-            log.info("Entity Move")
+            // log.info("Entity Move")
             entity_state_movement(&entities.arr[turn_context.entity_context.entity_i], &turn_context.entity_context, level)
         case .Wait:
             log.info("Entity Wait")
@@ -436,12 +488,16 @@ entity_move_delta :: proc(entity: ^Entity, directions: Direction_Set, level: Lev
     }
 }
 
-input_processing :: proc(entity_context: ^Entity_Context, entities: Entity_List) {
+input_processing :: proc(entity_context: ^Entity_Context, entities: Entity_List, level: Level) {
     e := entities.arr[entity_context.entity_i]
+    player := entities.arr[entities.player_i]
     input : Actor_Input
     if e.actor_type == .Player {
         input = player_input(entity_context^, e)
         // log.info("Player Input")
+    } else {
+        input = ai_input(entity_context^, entities, level)
+        log.info("Enemy Input")
     }
     entity_context.input = input
     determine_entity_state(input, entity_context)
@@ -469,6 +525,78 @@ player_input :: proc(entity_context: Entity_Context, e: Entity) -> (input: Actor
     return input
 }
 
+ai_input :: proc(entity_context: Entity_Context, entities: Entity_List, level: Level) -> (input: Actor_Input) {
+    entity := entities.arr[entity_context.entity_i]
+    player := entities.arr[entities.player_i]
+    input.type = .AI
+    if entity_context.state == .Idle {
+        input.key = ai_decide_move(entity, player, level)
+        #partial switch input.key {
+            case .UP, .DOWN, .LEFT, .RIGHT, .W, .A, .S, .D:
+                input.input = .Move
+                log.info("Key:", input.key, "State:", input.input)
+            case .SPACE:
+                input.input = .Wait
+                log.info("Key:", input.key, "State:", input.input)
+            case .KEY_NULL:
+                input.input = .Idle
+            case:
+                input.input = .Idle
+        }
+    } else {
+        input.input = .Idle
+    }
+    return input
+}
+
+ai_decide_move :: proc(entity, player: Entity, level: Level) -> (rl.KeyboardKey) {
+    pref := entity.move_pref
+    key : rl.KeyboardKey = .KEY_NULL
+    directions := entity.movement.directions
+    num_column := level.num_columns
+    player_tile_pos := find_v2_from_tile_index(player.movement.tile_i, num_column)
+    entity_tile_pos := find_v2_from_tile_index(entity.movement.tile_i, num_column)
+    distance := player_tile_pos - entity_tile_pos
+
+    loop: for i := 0; i < entity.movement.num_moves; i += 1 {
+        #partial switch pref {
+        case .Horizontal:
+            if distance.x < 0 && directions & {.West} == {.West} {
+                key = .LEFT
+                break loop
+            }
+            else if distance.x > 0 && directions & {.East} == {.East} {
+                key = .RIGHT
+                break loop
+            } else {
+                pref = .Vertical
+            }
+        case .Vertical:
+            if distance.y < 0 && directions & {.North} == {.North} {
+                key = .UP
+                break loop
+            }
+            else if distance.y > 0 && directions & {.South} == {.South} {
+                key = .DOWN
+                break loop
+            } else {
+                pref = .Horizontal
+            }
+        }
+    }
+    if key == .KEY_NULL {
+        key = .SPACE
+    }
+    return key
+}
+
+
+find_v2_from_tile_index :: proc(tile_i, column_size: int) -> ([2]int) {
+    row := int(tile_i / column_size)
+    column := tile_i - (row * column_size)
+    return {column, row}
+}
+
 determine_entity_state :: proc(input: Actor_Input, entity_context: ^Entity_Context) {
     switch input.input {
         case .Wait:
@@ -484,6 +612,7 @@ reset_entity_context :: proc(entity_i: int, entity_context: ^Entity_Context, ent
     entity := entities.arr[entity_i]
     entity_context.input = Actor_Input{entity.actor_type, .Idle, .KEY_NULL}
     entity_context.state = .Idle
+    entity_context.entity_i = entity_i
     entity_context.remaining_moves = entity.movement.num_moves
     entity_context.destination_i = -1
     entity_context.origin_i = entity.movement.tile_i
