@@ -209,9 +209,9 @@ main :: proc() {
             draw_walls_from_inverse(tile, HORIZONTAL_WALL, VERTICAL_WALL, inverse_set)
         }
 
-        rl.DrawRectangleRec(entities.arr[0].render.rec, player.render.color)
-
-        rl.DrawRectangleRec(entities.arr[1].render.rec, entities.arr[1].render.color)
+        for e in entities.arr {
+            rl.DrawRectangleRec(e.render.rec, e.render.color)
+        }
 
         rl.EndDrawing()
 
