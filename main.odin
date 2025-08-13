@@ -136,6 +136,7 @@ main :: proc() {
         actor_type = .Player,
         entity_type = .Explorer,
         move_pref = .None,
+        attack = 0,
         index = 0
     }
     append(&entities.arr, player)
@@ -156,6 +157,7 @@ main :: proc() {
         actor_type = .AI,
         entity_type = .White_Mummy,
         move_pref = .Horizontal,
+        attack = 2,
         index = 1
     }
     append(&entities.arr, mummy)
@@ -179,14 +181,15 @@ main :: proc() {
         }
 
         if gui.button_click_render(player_ptr.render, ZOOM_MULTIPLIER) {
-            log.info(player_ptr)
-            log.info(turn_context)
+            // log.info("Player:", player_ptr)
+            // log.info("Turn Context:", turn_context)
+            log.info("Entities:", len(entities.arr))
         }
         if gui.button_click_render(mummy_ptr.render, ZOOM_MULTIPLIER) {
             log.info(mummy_ptr)
         }
 
-        turn_state_handler(&turn_context, entities, level)
+        turn_state_handler(&turn_context, &entities, level)
 
         // Rendering Start
         rl.BeginDrawing()
@@ -263,6 +266,7 @@ Entity :: struct {
     actor_type : Actor_Type,
     entity_type : Entity_Type,
     move_pref : Move_Pref,
+    attack : int,
     index : int,
 }
 
@@ -296,6 +300,8 @@ Entity_State :: enum {
     Move,
     Wait,
     End,
+    Battle,
+    Death,
 }
 
 Input_Type :: enum {
@@ -332,7 +338,8 @@ Entity_Context :: struct {
 Turn_State :: enum {
     Input,
     Processing,
-    Next
+    Next,
+    Death
 }
 
 Turn_Context :: struct {
@@ -342,11 +349,12 @@ Turn_Context :: struct {
 }
 
 // Procs
-turn_state_handler :: proc(turn_context: ^Turn_Context, entities: Entity_List, level: Level) {
+turn_state_handler :: proc(turn_context: ^Turn_Context, entities: ^Entity_List, level: Level) {
     #partial switch turn_context.state {
         case .Input:
             // log.info("Input")
-            input_processing(&turn_context.entity_context, entities, level)
+            log.info(turn_context.entity_context)
+            input_processing(&turn_context.entity_context, entities^, level)
             if turn_context.entity_context.state == .Idle {
                 // log.info("Input Input")
                 turn_context.state = .Input
@@ -363,7 +371,7 @@ turn_state_handler :: proc(turn_context: ^Turn_Context, entities: Entity_List, l
             }
         case .Next:
             log.info("Turn Next")
-            turn_state_next(turn_context, entities)
+            turn_state_next(turn_context, entities^)
     }
 }
 
@@ -378,7 +386,7 @@ turn_state_next :: proc(turn_context: ^Turn_Context, entities: Entity_List) {
     log.info("Current Turn:", turn_context.current_turn)
 }
 
-entity_state_handler :: proc(turn_context: ^Turn_Context, entities: Entity_List, level: Level) {
+entity_state_handler :: proc(turn_context: ^Turn_Context, entities: ^Entity_List, level: Level) {
     #partial switch turn_context.entity_context.state {
         case .Move:
             // log.info("Entity Move")
@@ -393,7 +401,18 @@ entity_state_handler :: proc(turn_context: ^Turn_Context, entities: Entity_List,
             log.info("Entity Idle")
             turn_context.entity_context.input.input = .Idle
             turn_context.state = .Input
+        case .Battle:
+            log.info("Entity Battle")
+            entity_state_battle(entities.arr[turn_context.current_turn], &turn_context.entity_context, entities)
+        case .Death:
+            entity_state_death(turn_context, entities)
+            turn_context.state = .Next
     }
+}
+
+entity_state_death :: proc(turn_context: ^Turn_Context, entities: ^Entity_List) {
+    entity_context := &turn_context.entity_context
+    remove_entity_from_list(turn_context.current_turn, entities)
 }
 
 entity_state_movement :: proc(entity: ^Entity, entity_context: ^Entity_Context, level: Level) {
@@ -440,10 +459,53 @@ entity_state_movement :: proc(entity: ^Entity, entity_context: ^Entity_Context, 
     }
     if reached {
         entity_context.remaining_moves -= 1
-        entity_context.state = .Idle
         entity.movement.directions = level.tiles[entity_context.destination_i].valid_directions
         entity.movement.tile_i = entity_context.destination_i
-        entity_context.origin_i = entity_context.destination_i
+        entity_context.origin_i = entity_context.destination_i 
+        if find_entity_same_tile(entity^, entities) != -1 {
+            entity_context.state = .Battle
+        } else {
+            entity_context.state = .Idle
+        }
+    }
+}
+
+entity_state_battle :: proc(entity: Entity, entity_context: ^Entity_Context, entities: ^Entity_List) {
+    defender_i := find_entity_same_tile(entity, entities^)
+    log.info("Defender i:", defender_i)
+    if entity_combat(entity.index, defender_i, entities^) {
+        entity_context.state = .Idle
+        log.info("Killed:", entities.arr[defender_i])
+        remove_entity_from_list(defender_i, entities)
+        entity_context.entity_i -= 1
+    } else {
+        entity_context.state = .Death
+    }
+}
+
+find_entity_same_tile :: proc(entity: Entity, entities: Entity_List) -> (defender_i: int) {
+    tile_i := entity.movement.tile_i
+    for i in 0..<len(entities.arr) {
+        if entities.arr[i].movement.tile_i == tile_i && i != entity.index{
+            return i
+        }
+    }
+    return -1
+}
+
+entity_combat :: proc(attacker_i, defender_i : int, entities : Entity_List) -> (winner: bool) {
+    attacker := entities.arr[attacker_i]
+    defender := entities.arr[defender_i]
+    if attacker.attack >= defender.attack {
+        return true
+    }
+    return false
+}
+
+remove_entity_from_list :: proc(entity_i: int, entities: ^Entity_List) {
+    ordered_remove(&entities.arr, entity_i)
+    for i in 0..<len(entities.arr) {
+        entities.arr[i].index = i
     }
 }
 
