@@ -139,8 +139,7 @@ main :: proc() {
         attack = 0,
         index = 0
     }
-    append(&entities.arr, player)
-    player.index = len(entities.arr)-1
+    insert_entity_into_list(player, &entities)
     entities.player_i = player.index
     player_ptr = &entities.arr[player.index]
 
@@ -160,7 +159,7 @@ main :: proc() {
         attack = 2,
         index = 1
     }
-    append(&entities.arr, mummy)
+    insert_entity_into_list(mummy, &entities)
 
     move_to_tile(&entities.arr[0], level.tiles[level.player_start_i])
     move_to_tile(&entities.arr[1], level.tiles[white_mummy_start_i])
@@ -260,12 +259,17 @@ Wall :: struct {
     padding : f32
 }
 
+Id :: struct {
+    value : int
+}
+
 Entity :: struct {
     render : gui.Renderable,
     movement : Entity_Movement,
     actor_type : Actor_Type,
     entity_type : Entity_Type,
     move_pref : Move_Pref,
+    id : Id,
     attack : int,
     index : int,
 }
@@ -279,6 +283,7 @@ Entity_Movement :: struct {
 
 Entity_List :: struct {
     player_i : int,
+    generation : int,
     arr : [dynamic]Entity
 }
 
@@ -471,13 +476,18 @@ entity_state_movement :: proc(entity: ^Entity, entity_context: ^Entity_Context, 
 }
 
 entity_state_battle :: proc(entity: Entity, entity_context: ^Entity_Context, entities: ^Entity_List) {
+    found : bool
     defender_i := find_entity_same_tile(entity, entities^)
     log.info("Defender i:", defender_i)
     if entity_combat(entity.index, defender_i, entities^) {
         entity_context.state = .Idle
         log.info("Killed:", entities.arr[defender_i])
         remove_entity_from_list(defender_i, entities)
-        entity_context.entity_i -= 1
+        for i in 0..<len(entities.arr) {
+            if entities.arr[i].id.value == entity.id.value {
+                entity_context.entity_i = i
+            }
+        }
     } else {
         entity_context.state = .Death
     }
@@ -500,6 +510,13 @@ entity_combat :: proc(attacker_i, defender_i : int, entities : Entity_List) -> (
         return true
     }
     return false
+}
+
+insert_entity_into_list :: proc(entity: Entity, entities: ^Entity_List) {
+    entities.generation += 1
+    append(&entities.arr, entity)
+    index := len(entities.arr)-1
+    entities.arr[index].index = index
 }
 
 remove_entity_from_list :: proc(entity_i: int, entities: ^Entity_List) {
@@ -545,9 +562,8 @@ entity_move_delta :: proc(entity: ^Entity, directions: Direction_Set, level: Lev
     if distance.x <= 0 && distance.y <= 0 {
         entity.render.x, entity.render.y = target_pos.x, target_pos.y
          return true
-    } else {
-        return false
     }
+    return false
 }
 
 input_processing :: proc(entity_context: ^Entity_Context, entities: Entity_List, level: Level) {
