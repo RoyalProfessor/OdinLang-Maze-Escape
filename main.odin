@@ -65,11 +65,13 @@ VERTICAL_WALL :: Wall{
 PLAYER_RENDER :: gui.Renderable{rl.RED,{0, 0, 40, 40}}
 PLAYER_SPEED :: f32(600)
 PLAYER_MOVES :: 1
+PLAYER_ATTACK :: 0
 
 // White Mummy Constants
 WHITE_MUMMY_RENDER :: gui.Renderable{rl.WHITE,{0, 0, 40, 40}}
 WHITE_MUMMY_SPEED :: f32(400)
 WHITE_MUMMY_MOVES :: 2
+WHITE_MUMMY_ATTACK :: 2
 
 // Globals
 player_ptr : ^Entity
@@ -136,7 +138,7 @@ main :: proc() {
         actor_type = .Player,
         entity_type = .Explorer,
         move_pref = .None,
-        attack = 0,
+        attack = PLAYER_ATTACK,
         index = 0
     }
     insert_entity_into_list(player, &entities)
@@ -156,7 +158,7 @@ main :: proc() {
         actor_type = .AI,
         entity_type = .White_Mummy,
         move_pref = .Horizontal,
-        attack = 2,
+        attack = WHITE_MUMMY_ATTACK,
         index = 1
     }
     insert_entity_into_list(mummy, &entities)
@@ -517,6 +519,7 @@ insert_entity_into_list :: proc(entity: Entity, entities: ^Entity_List) {
     append(&entities.arr, entity)
     index := len(entities.arr)-1
     entities.arr[index].index = index
+    entities.arr[index].id.value = entities.generation
 }
 
 remove_entity_from_list :: proc(entity_i: int, entities: ^Entity_List) {
