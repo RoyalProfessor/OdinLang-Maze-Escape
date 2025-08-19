@@ -308,6 +308,7 @@ Entity_State :: enum {
     Wait,
     End,
     Battle,
+    Decrement_Move,
     Death,
 }
 
@@ -371,11 +372,7 @@ turn_state_handler :: proc(turn_context: ^Turn_Context, entities: ^Entity_List, 
             }
         case .Processing:
             // log.info("Turn Processing")
-            if turn_context.entity_context.remaining_moves > 0 {
-                entity_state_handler(turn_context, entities, level)
-            } else {
-                turn_context.state = .Next
-            }
+            entity_state_handler(turn_context, entities, level)
         case .Next:
             log.info("Turn Next")
             turn_state_next(turn_context, entities^)
@@ -411,6 +408,13 @@ entity_state_handler :: proc(turn_context: ^Turn_Context, entities: ^Entity_List
         case .Battle:
             log.info("Entity Battle")
             entity_state_battle(entities.arr[turn_context.current_turn], &turn_context.entity_context, entities)
+        case .Decrement_Move:
+            turn_context.entity_context.remaining_moves -= 1
+            if turn_context.entity_context.remaining_moves == 0 {
+                turn_context.entity_context.state = .End
+            } else {
+                turn_context.entity_context.state = .Idle
+            }
         case .Death:
             entity_state_death(turn_context, entities)
             turn_context.state = .Next
@@ -465,14 +469,13 @@ entity_state_movement :: proc(entity: ^Entity, entity_context: ^Entity_Context, 
             }
     }
     if reached {
-        entity_context.remaining_moves -= 1
         entity.movement.directions = level.tiles[entity_context.destination_i].valid_directions
         entity.movement.tile_i = entity_context.destination_i
         entity_context.origin_i = entity_context.destination_i 
         if find_entity_same_tile(entity^, entities) != -1 {
             entity_context.state = .Battle
         } else {
-            entity_context.state = .Idle
+            entity_context.state = .Decrement_Move
         }
     }
 }
@@ -482,7 +485,7 @@ entity_state_battle :: proc(entity: Entity, entity_context: ^Entity_Context, ent
     defender_i := find_entity_same_tile(entity, entities^)
     log.info("Defender i:", defender_i)
     if entity_combat(entity.index, defender_i, entities^) {
-        entity_context.state = .Idle
+        entity_context.state = .Decrement_Move
         log.info("Killed:", entities.arr[defender_i])
         remove_entity_from_list(defender_i, entities)
         for i in 0..<len(entities.arr) {
